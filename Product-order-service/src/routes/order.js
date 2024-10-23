@@ -1,15 +1,14 @@
-// src/routes / order.js
+// src/routes/order.js
 const express = require('express');
 const router = express.Router();
 const { Order, OrderItem } = require('../models/order');
 const { Product } = require('../models/product');
-const verifyToken = require('../middlewares/auth');
 const sendEmail = require('../services/email');
 
 // Create order
-router.post('/', verifyToken, async (req, res) => {
+router.post('/', async (req, res) => {
     try {
-        const { items } = req.body;
+        const { items, userId, userEmail } = req.body;
         let totalAmount = 0;
 
         // Calculate total amount and verify stock
@@ -17,7 +16,7 @@ router.post('/', verifyToken, async (req, res) => {
             const product = await Product.findByPk(item.productId);
             if (!product || product.stock < item.quantity) {
                 return res.status(400).json({
-                    message: `Product ${product.name} is out of stock`
+                    message: `Product ${product?.name || 'not found'} is out of stock`
                 });
             }
             totalAmount += product.price * item.quantity;
@@ -25,7 +24,7 @@ router.post('/', verifyToken, async (req, res) => {
 
         // Create order
         const order = await Order.create({
-            userId: req.user.id,
+            userId,
             totalAmount,
             status: 'pending'
         });
@@ -48,7 +47,7 @@ router.post('/', verifyToken, async (req, res) => {
 
         // Send confirmation email
         await sendEmail({
-            to: req.user.email,
+            to: userEmail,
             subject: 'Order Confirmation',
             text: `Your order #${order.id} has been confirmed.`
         });
@@ -60,10 +59,11 @@ router.post('/', verifyToken, async (req, res) => {
 });
 
 // Get user's orders
-router.get('/my-orders', verifyToken, async (req, res) => {
+router.get('/my-orders/:userId', async (req, res) => {
     try {
+        const { userId } = req.params;
         const orders = await Order.findAll({
-            where: { userId: req.user.id },
+            where: { userId },
             include: [{ model: Product }]
         });
         res.json(orders);
